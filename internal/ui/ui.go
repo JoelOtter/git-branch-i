@@ -12,10 +12,14 @@ func draw(screen tcell.Screen, branches []git.Branch, pointer int) {
 		if branch.Current {
 			screen.SetCell(0, i, tcell.StyleDefault, '*')
 		}
-		if i == pointer {
-			screen.SetCell(1, i, tcell.StyleDefault, '>')
+		style := tcell.StyleDefault
+		if branch.Current {
+			style = style.Bold(true)
 		}
-		screen.SetCell(2, i, tcell.StyleDefault, []rune(branch.Name)...)
+		if i == pointer {
+			style = style.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
+		}
+		screen.SetCell(2, i, style, []rune(branch.Name)...)
 	}
 	screen.Show()
 }
@@ -63,12 +67,7 @@ func ShowUI(branches []git.Branch) error {
 					close(quit)
 					return
 				case tcell.KeyEnter:
-					out, err := git.ChangeBranch(branches[pointer].Name)
-					if err != nil {
-						uiErr = err
-					} else {
-						uiOut = out
-					}
+					uiOut, uiErr = git.ChangeBranch(branches[pointer].Name)
 					close(quit)
 					return
 				case tcell.KeyUp:

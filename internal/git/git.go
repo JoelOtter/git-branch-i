@@ -36,7 +36,7 @@ func ChangeBranch(branch string) (string, error) {
 	gitCmd := exec.Command("git", "checkout", branch)
 	output, err := gitCmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to checkout branch %s: %w", branch, err)
+		return string(output), fmt.Errorf("failed to checkout branch %s: %w", branch, err)
 	}
 	return string(output), nil
 }
