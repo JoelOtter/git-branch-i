@@ -82,6 +82,7 @@ func ShowUI(branches []git.Branch) error {
 				}
 			case *tcell.EventResize:
 				screen.Sync()
+				draw(screen, branches, pointer)
 			}
 		}
 	}()
