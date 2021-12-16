@@ -1,4 +1,4 @@
-# git-branch-i
+# `git branch-i`
 
 I got cross that there's no `git branch --interactive`, so I made this. It's a 
 very (very) simple curses-mode `git branch`/`git checkout` alternative which
