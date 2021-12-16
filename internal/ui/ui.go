@@ -10,7 +10,7 @@ func draw(screen tcell.Screen, branches []git.Branch, pointer int) {
 	screen.Clear()
 	for i, branch := range branches {
 		if branch.Current {
-			screen.SetCell(0, i, tcell.StyleDefault, '*')
+			screen.SetCell(1, i+1, tcell.StyleDefault, '*')
 		}
 		style := tcell.StyleDefault
 		if branch.Current {
@@ -19,7 +19,7 @@ func draw(screen tcell.Screen, branches []git.Branch, pointer int) {
 		if i == pointer {
 			style = style.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
 		}
-		screen.SetCell(2, i, style, []rune(branch.Name)...)
+		screen.SetCell(3, i+1, style, []rune(branch.Name)...)
 	}
 	screen.Show()
 }
