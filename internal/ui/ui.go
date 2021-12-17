@@ -5,10 +5,20 @@ import (
 	"github.com/JoelOtter/git-branch-i/internal/git"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
+	"io"
 	"strings"
 )
 
-func drawStr(screen tcell.Screen, x int, y int, style tcell.Style, str string) {
+type ui struct {
+	screen       tcell.Screen
+	branches     []git.Branch
+	repoRoot     string
+	pointer      int
+	deleteBranch string
+	quit         chan struct{}
+}
+
+func (u *ui) drawStr(x int, y int, style tcell.Style, str string) {
 	for _, c := range str {
 		var comb []rune
 		w := runewidth.RuneWidth(c)
@@ -17,64 +27,108 @@ func drawStr(screen tcell.Screen, x int, y int, style tcell.Style, str string) {
 			c = ' '
 			w = 1
 		}
-		screen.SetContent(x, y, c, comb, style)
+		u.screen.SetContent(x, y, c, comb, style)
 		x += w
 	}
 }
 
-func draw(screen tcell.Screen, branches []git.Branch, pointer int, deleteBranch string) {
-	screen.Clear()
-	for i, branch := range branches {
+func (u *ui) draw() {
+	u.screen.Clear()
+	u.drawStr(1, 1, tcell.StyleDefault.Bold(true), u.repoRoot)
+	for i, branch := range u.branches {
 		if branch.Current {
-			screen.SetCell(1, i+1, tcell.StyleDefault, '*')
+			u.screen.SetCell(1, i+3, tcell.StyleDefault, '*')
 		}
 		style := tcell.StyleDefault
 		if branch.Current {
 			style = style.Bold(true)
 		}
-		if i == pointer {
+		if i == u.pointer {
 			style = style.Reverse(true)
 		}
-		drawStr(screen, 3, i+1, style, branch.Name)
+		u.drawStr(3, i+3, style, branch.Name)
 	}
-	if deleteBranch != "" {
-		w, h := screen.Size()
+	if u.deleteBranch != "" {
+		w, h := u.screen.Size()
 		for i := 1; i < w-1; i++ {
-			screen.SetCell(i, h-2, tcell.StyleDefault.Background(tcell.ColorRed))
+			u.screen.SetCell(i, h-2, tcell.StyleDefault.Background(tcell.ColorRed))
 		}
-		drawStr(
-			screen,
+		u.drawStr(
 			2,
 			h-2,
 			tcell.StyleDefault.Background(tcell.ColorRed).Foreground(tcell.ColorBlack),
-			fmt.Sprintf("Delete branch %s (y/n)? ", deleteBranch),
+			fmt.Sprintf("Delete branch %s (y/n)? ", u.deleteBranch),
 		)
 	}
-	screen.Show()
+	u.screen.Show()
 }
 
-func getInitialPointer(branches []git.Branch) int {
-	for i, branch := range branches {
-		if branch.Current {
-			return i
+func (u *ui) keyDown() {
+	u.pointer = (u.pointer + 1) % len(u.branches)
+	u.draw()
+}
+
+func (u *ui) keyUp() {
+	u.pointer = u.pointer - 1
+	if u.pointer < 0 {
+		u.pointer = len(u.branches) - 1
+	}
+	u.draw()
+}
+
+func (u *ui) run(uiOut io.Writer, uiErr *error) {
+	defer close(u.quit)
+	for {
+		ev := u.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch ev.Key() {
+			case tcell.KeyEscape, tcell.KeyCtrlC:
+				return
+			case tcell.KeyEnter:
+				*uiErr = git.ChangeBranch(u.branches[u.pointer].Name, uiOut)
+				return
+			case tcell.KeyUp, tcell.KeyPgUp, tcell.KeyCtrlP:
+				u.keyUp()
+			case tcell.KeyDown, tcell.KeyPgDn, tcell.KeyCtrlN:
+				u.keyDown()
+			case tcell.KeyDelete, tcell.KeyBackspace, tcell.KeyDEL:
+				u.deleteBranch = u.branches[u.pointer].Name
+				u.draw()
+			case tcell.KeyRune:
+				switch ev.Rune() {
+				case 'j':
+					u.keyDown()
+				case 'k':
+					u.keyUp()
+				case 'y':
+					if u.deleteBranch != "" {
+						u.branches, *uiErr = git.DeleteBranch(u.deleteBranch, uiOut)
+						if *uiErr != nil {
+							return
+						}
+						u.deleteBranch = ""
+						u.pointer = u.pointer - 1
+						if u.pointer < 0 {
+							u.pointer = 0
+						}
+						u.draw()
+					}
+				case 'n':
+					if u.deleteBranch != "" {
+						u.deleteBranch = ""
+					}
+					u.draw()
+				case 'd':
+					u.deleteBranch = u.branches[u.pointer].Name
+					u.draw()
+				}
+			}
+		case *tcell.EventResize:
+			u.screen.Sync()
+			u.draw()
 		}
 	}
-	return 0
-}
-
-func keyDown(screen tcell.Screen, branches []git.Branch, pointer int) int {
-	pointer = (pointer + 1) % len(branches)
-	draw(screen, branches, pointer, "")
-	return pointer
-}
-
-func keyUp(screen tcell.Screen, branches []git.Branch, pointer int) int {
-	pointer = pointer - 1
-	if pointer < 0 {
-		pointer = len(branches) - 1
-	}
-	draw(screen, branches, pointer, "")
-	return pointer
 }
 
 func ShowUI(branches []git.Branch) error {
@@ -95,70 +149,38 @@ func ShowUI(branches []git.Branch) error {
 		}
 	}()
 
-	pointer := getInitialPointer(branches)
-	deleteBranch := ""
+	gitRoot, err := git.GetRepoRoot(uiOut)
+	if err != nil {
+		return fmt.Errorf("failed to get repo root: %w", err)
+	}
 
-	draw(screen, branches, pointer, deleteBranch)
-
-	quit := make(chan struct{})
+	u := &ui{
+		screen:       screen,
+		branches:     branches,
+		repoRoot:     gitRoot,
+		pointer:      getInitialPointer(branches),
+		deleteBranch: "",
+		quit:         make(chan struct{}),
+	}
+	u.draw()
 
 	defer screen.Fini()
-	go func() {
-		defer close(quit)
-		for {
-			ev := screen.PollEvent()
-			switch ev := ev.(type) {
-			case *tcell.EventKey:
-				switch ev.Key() {
-				case tcell.KeyEscape, tcell.KeyCtrlC:
-					return
-				case tcell.KeyEnter:
-					uiErr = git.ChangeBranch(branches[pointer].Name, uiOut)
-					return
-				case tcell.KeyUp, tcell.KeyPgUp, tcell.KeyCtrlP:
-					pointer = keyUp(screen, branches, pointer)
-				case tcell.KeyDown, tcell.KeyPgDn, tcell.KeyCtrlN:
-					pointer = keyDown(screen, branches, pointer)
-				case tcell.KeyDelete, tcell.KeyBackspace, tcell.KeyDEL:
-					deleteBranch = branches[pointer].Name
-					draw(screen, branches, pointer, deleteBranch)
-				case tcell.KeyRune:
-					switch ev.Rune() {
-					case 'j':
-						pointer = keyDown(screen, branches, pointer)
-					case 'k':
-						pointer = keyUp(screen, branches, pointer)
-					case 'y':
-						if deleteBranch != "" {
-							branches, uiErr = git.DeleteBranch(deleteBranch, uiOut)
-							if uiErr != nil {
-								return
-							}
-							deleteBranch = ""
-							pointer = pointer - 1
-							if pointer < 0 {
-								pointer = 0
-							}
-							draw(screen, branches, pointer, deleteBranch)
-						}
-					case 'n':
-						if deleteBranch != "" {
-							deleteBranch = ""
-						}
-						draw(screen, branches, pointer, deleteBranch)
-					}
-				}
-			case *tcell.EventResize:
-				screen.Sync()
-				draw(screen, branches, pointer, deleteBranch)
-			}
-		}
-	}()
+
+	go u.run(uiOut, &uiErr)
 
 	for {
 		select {
-		case <-quit:
+		case <-u.quit:
 			return uiErr
 		}
 	}
+}
+
+func getInitialPointer(branches []git.Branch) int {
+	for i, branch := range branches {
+		if branch.Current {
+			return i
+		}
+	}
+	return 0
 }

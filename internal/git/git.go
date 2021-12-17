@@ -14,6 +14,16 @@ type Branch struct {
 	Current bool
 }
 
+func GetRepoRoot(output io.Writer) (string, error) {
+	gitCmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	gitCmd.Stderr = output
+	out, err := gitCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git top-level")
+	}
+	return string(out), nil
+}
+
 func GetBranches() ([]Branch, error) {
 	gitCmd := exec.Command("git", "branch")
 	gitCmd.Stderr = os.Stderr
