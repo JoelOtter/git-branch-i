@@ -33,7 +33,7 @@ func draw(screen tcell.Screen, branches []git.Branch, pointer int, deleteBranch 
 			style = style.Bold(true)
 		}
 		if i == pointer {
-			style = style.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
+			style = style.Reverse(true)
 		}
 		drawStr(screen, 3, i+1, style, branch.Name)
 	}
