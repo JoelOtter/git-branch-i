@@ -3,6 +3,7 @@ package git
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -32,11 +33,22 @@ func GetBranches() ([]Branch, error) {
 	return branches, nil
 }
 
-func ChangeBranch(branch string) (string, error) {
+func ChangeBranch(branch string, output io.Writer) error {
 	gitCmd := exec.Command("git", "checkout", branch)
-	output, err := gitCmd.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("failed to checkout branch %s: %w", branch, err)
+	gitCmd.Stdout = output
+	gitCmd.Stderr = output
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to checkout branch %s: %w", branch, err)
 	}
-	return string(output), nil
+	return nil
+}
+
+func DeleteBranch(branch string, output io.Writer) ([]Branch, error) {
+	gitCmd := exec.Command("git", "branch", "-D", branch)
+	gitCmd.Stdout = output
+	gitCmd.Stderr = output
+	if err := gitCmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to delete branch %s: %w", branch, err)
+	}
+	return GetBranches()
 }
