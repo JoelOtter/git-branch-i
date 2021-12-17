@@ -33,6 +33,21 @@ func getInitialPointer(branches []git.Branch) int {
 	return 0
 }
 
+func keyDown(screen tcell.Screen, branches []git.Branch, pointer int) int {
+	pointer = (pointer + 1) % len(branches)
+	draw(screen, branches, pointer)
+	return pointer
+}
+
+func keyUp(screen tcell.Screen, branches []git.Branch, pointer int) int {
+	pointer = pointer - 1
+	if pointer < 0 {
+		pointer = len(branches) - 1
+	}
+	draw(screen, branches, pointer)
+	return pointer
+}
+
 func ShowUI(branches []git.Branch) error {
 	tcell.SetEncodingFallback(tcell.EncodingFallbackASCII)
 	screen, err := tcell.NewScreen()
@@ -70,15 +85,17 @@ func ShowUI(branches []git.Branch) error {
 					uiOut, uiErr = git.ChangeBranch(branches[pointer].Name)
 					close(quit)
 					return
-				case tcell.KeyUp:
-					pointer = pointer - 1
-					if pointer < 0 {
-						pointer = len(branches) - 1
+				case tcell.KeyUp, tcell.KeyPgUp, tcell.KeyCtrlP:
+					pointer = keyUp(screen, branches, pointer)
+				case tcell.KeyDown, tcell.KeyPgDn, tcell.KeyCtrlN:
+					pointer = keyDown(screen, branches, pointer)
+				case tcell.KeyRune:
+					switch ev.Rune() {
+					case 'j':
+						pointer = keyDown(screen, branches, pointer)
+					case 'k':
+						pointer = keyUp(screen, branches, pointer)
 					}
-					draw(screen, branches, pointer)
-				case tcell.KeyDown:
-					pointer = (pointer + 1) % len(branches)
-					draw(screen, branches, pointer)
 				}
 			case *tcell.EventResize:
 				screen.Sync()

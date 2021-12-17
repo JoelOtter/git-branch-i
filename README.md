@@ -17,3 +17,10 @@ go install github.com/JoelOtter/git-branch-i
 
 You can now run `git branch-i` to use the tool, so long as your Go directory is 
 on your system path.
+
+## Usage
+
+* Branches can be navigated using the arrow keys, j and k, Pg Up/Down, or
+Ctrl+N and Ctrl+P.
+* Choose a branch with the return key.
+* Exit with Escape or Ctrl+C.
