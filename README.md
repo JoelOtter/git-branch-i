@@ -13,7 +13,7 @@ like as much of a 'real' Git tool as possible.
 Install it using Go, like so:
 
 ```sh
-go install github.com/JoelOtter/git-branch-i
+go install github.com/JoelOtter/git-branch-i@latest
 ```
 
 You can now run `git branch-i` to use the tool, so long as your Go directory is 
